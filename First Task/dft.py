@@ -1,5 +1,6 @@
 # Discrete Fourier Transform (DFT)
-# FB - 20141227
+
+
 import random
 import math
 import cmath
