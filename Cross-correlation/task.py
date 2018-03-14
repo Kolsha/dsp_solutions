@@ -6,38 +6,36 @@ import numpy as np
 pi2 = np.pi * 2.0
 
 
-def fConv(f1, f2):
-
-	n1 = len(f1);
-	n2 = len(f2)
-	n = n1 + n2 - 1
-	f1 = np.pad(f1, (0, n - n1), 'constant', constant_values=(0, 0))
-	f2 = np.pad(f2, (0, n - n2), 'constant', constant_values=(0, 0))
-	dft1 = np.fft.fft(f1)
-	dft2 = np.fft.fft(f2)
-
-    
-    
-
-    #print "ll: ", len(dft1), len(dft2)
-    
-	return np.fft.ifft(dft1 * dft2)
-
-def Conv_slow(f1, f2):
+def fCorrelation(f1, f2):
     n1 = len(f1);
     n2 = len(f2)
     n = n1 + n2 - 1
     f1 = np.pad(f1, (0, n - n1), 'constant', constant_values=(0, 0))
     f2 = np.pad(f2, (0, n - n2), 'constant', constant_values=(0, 0))
+    dft1 = np.fft.fft(f1)
+    dft1 = np.conjugate(dft1)
+
+    dft2 = np.fft.fft(f2)
+    res = np.fft.ifft(dft1 * dft2)
+
+    return np.fft.fftshift(res)
+
+def Correlation_slow(f1, f2):
+    n1 = len(f1);
+    n2 = len(f2)
+    n = n1 + n2 - 1
+    f1 = np.pad(f1, (0, n - n1), 'constant', constant_values=(0, 0))
+    f2 = np.pad(f2, (n - n2, 0), 'constant', constant_values=(0, 0))
     out = np.empty(n)
     for k in range(n):
         v = np.imag(0)
         v.flags['WRITEABLE'] = True
         for t in range(n):
-            f2v = 0
-            if (k - t) < n:
-                f2v = f2[k - t] 
-            a = f1[t] * f2v
+            f2v = np.imag(0)
+            if (k + t) < n:
+                f2v = f2[k + t] 
+
+            a = f2v * np.conjugate(f1[t]) 
             v = v + a
         out[k] = (v)
     return out
@@ -45,29 +43,39 @@ def Conv_slow(f1, f2):
 
 
 
-#x = np.linspace(0, (2 * pi2), 640)
-#data1 = (np.sin(1 * x)) / np.sqrt(2)
-
-#data2 = (np.sin(1 * x + np.pi / 2.0)) / np.sqrt(2)
-
 x = range(0, 50)
 
 xf = range(0, 50 * 2 - 1)
 
+
 data1 = np.empty(50)
-data1.fill(1)
-data1[0:30] = 0
+data1.fill(0)
+data1[30:40] = 1
 
 data2 = np.empty(50)
-data2.fill(1)
+data2.fill(0)
 
-data2[29:50] = 0
+data2[25:35] = 1
 
-Sconv = Conv_slow(data1, data2)
-Fconv = fConv(data1, data2)
-NPconv = np.convolve(data1, data2, mode='full')
+
+data1 = np.random.rand(50)
+data2 = np.random.rand(50)
+
+'''x = np.linspace(0, (2 * pi2), 100)
+data1 = (np.sin(1 * x)) / np.sqrt(2)
+
+data2 = (np.sin(1 * x)) / np.sqrt(2)
+
+xf = np.arange(199)
+'''
+
+Sconv = Correlation_slow(data1, data2)
+Fconv = fCorrelation(data1, data2)
+NPconv = np.correlate(data1, data2, mode='full')[::-1]
 
 print len(x), len(NPconv), len(Sconv), len(Fconv)
+
+
 
 numPlots = 5
 
