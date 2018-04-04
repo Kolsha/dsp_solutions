@@ -6,203 +6,164 @@ import numpy as np
 pi2 = np.pi * 2.0
 
 
-def ButterworthFilter(signal, sampleFrequency, order, f0, DCGain):
-    N = len(signal)
-    signalFFT = (np.fft.fft(signal))  #
-    #signalFFT = np.fft.fftshift(signalFFT)
-    if(f0 > 0):
-        binWidth = float(sampleFrequency) / float(N)
-        for i in range(1, N/2):
-            binFreq = binWidth * i
-
-            #print binWidth, i
-
-            gain = DCGain / np.sqrt(1 + np.power(binFreq / f0, 2 * order))
-
-            #print gain
-
-            signalFFT[i] *= gain
-            signalFFT[N - i] *= gain
-
-    return (np.fft.ifft( signalFFT ))
-
-
-
-
-
-def ImpulseResponse(N, sampleFrequency, order, f0, DCGain):
-
-
-    ir = np.array([1 for i in range(0, N)], dtype = complex)
+def create_filter_butterworth(signalLength, sampleFreq, order, f0, Gain):
+    nBins = signalLength // 2
+    binWidth = sampleFreq / signalLength
     
-    if(f0 > 0):
-        binWidth = float(sampleFrequency) / float(N)
-
-        df = pi2 / float(sampleFrequency)
-
-        for i in range(1, N):
-            binFreq = binWidth * i
-
-            gain = DCGain / np.sqrt(1 + np.power(binFreq / f0, 2 * order))
-
-            #tmp = np.imag(df * i)
-            #tmp.flags['WRITEABLE'] = True
-            #tmp.real = gain
-            ir[i] = gain #* np.exp(1j * df * i)
-            #ir[N - i] *= gain
-
-
-
+    filt = np.array([0 for i in range(nBins)], dtype=complex)
     
-
-    #ir += ir[::-1]
-
-
-    fft = np.fft.ifft(ir)
-    fft = np.fft.fftshift(fft)
-
-
-    return fft[len(fft)/2:]
-
-
-
-
-sampleCount = 700
-
-rect = np.empty(sampleCount)
-rect.fill(0)
-
-rect[:10] = 1
-
-numPlots = 3
-
-rf = np.fft.fft(rect)
-
-
-plt.subplot(numPlots, 1, 1).set_title('Datas')
-#plt.plot( [d.real for d in rect], label='signal')
-
-#plt.plot( [np.absolute(d) for d in rf], label='ir')
-
-phase = np.angle(rf)
-
-plt.plot(range(0, sampleCount), [np.absolute(d) for d in phase], label='ph')
-
-
-
-
-
-
-sampleFrequency = 10
-
-
-
-ir = ImpulseResponse(sampleCount, sampleFrequency, 30, 1.5, 1.1)
-
-
-mir = np.array([1 for i in range(0, len(ir))], dtype = complex)
-
-rf =  np.imag(rf)
-for i in range(len(ir)):
-
-    tmp = np.complex(ir[i].real, rf[i].imag)
-    #tmp.flags['WRITEABLE'] = True
-    #tmp.imag = 
-
+    for i in range(nBins):
+        binFreq = binWidth * i
+        gain = Gain / np.sqrt(1 + np.power(binFreq / f0, 2 * order))
+        filt[i] = gain
+        
+#     df = 2 * np.pi / f0
+#     filt[i] *= np.exp(1j * df * i)
     
+    rect = [1 if i < 10 else 0 for i in range(signalLength)]
+    rect = np.fft.fft(rect)[:len(rect) // 2]
+    
+    for i in range(len(filt)):
+        filt[i] *= np.exp(1j * -np.angle(rect[i]))
+    return filt
 
-    #tmp.real = 
+def apply_filter_butterworth(s, filt):
+    N = len(s)
+    ffts = np.fft.fft(s)
+    
+    nBins = N // 2
+    
+    for i in range(nBins):
+        ffts[i] *= filt[i]
+        ffts[N - i - 1] *= filt[i]
+    return np.real(np.fft.ifft(ffts))
 
-    mir[i] = tmp
+def impulse_response_butterworth(filt):
+    return filt
 
-
-
-plt.plot(range(0, len(mir)), [np.absolute(d * 100) for d in mir], label='new ir')
-
-
-plt.legend(loc='upper right')
-
-plt.show()
-
-'''
-Fs = 25 # Sample rate, 25Hz
-f1 = 1  # 1 Hz Signal
-f2 = 8  # 8 Hz Signal
-
-
-sampleCount = 100
-
-sampleFrequency = 10
-
-signal = np.empty(sampleCount)
-
-for t in range(0, sampleCount):
-    signal[t] = np.sin( pi2 * f1 / Fs * t ) + np.sin( pi2 * f2 / Fs * t )
- 
+def prod(iterable):
+    from functools import reduce
+    from operator import mul
+    return reduce(mul, iterable, 1)
 
 
 
+def transfer_function_butterworth(Rp, Rs, w0, w1):
+    ep = np.sqrt(np.power(10, float(Rp) / 10.) - 1)
+    es = np.sqrt(np.power(10, float(Rs) / 10.) - 1)
+    k = (w0) / float(w1)
 
-filteredSignal = ButterworthFilter(signal, sampleFrequency, 30, 1.5, 1.1 );
+    #print w0, w1, k
+    k1 = float(ep) / float(es)
+    N = int(np.ceil(np.log(k1) / np.log(k))) # xz
+
+    L = N // 2
+    r = N % 2
+    a = np.power(float(ep), - 1. / N)
+    th = [(2 * n + 1) / 2 / N * np.pi for n in range(L)]
+    
+    return lambda s: 1. / (ep * np.power(s + a, r) * prod(s*s + 2*a*np.sin(thn)*s + a*a for thn in th))
 
 
 
-print len(signal), len(filteredSignal)
 
-x = range(len(signal))
+N = 20
+T = 1.0 * N # s
+
+Fs = 25
+f1 = 1
+f2 = 8
+w1 = 2 * np.pi * f1
+w2 = 2 * np.pi * f2
+
+t = np.linspace(0, T, N)
+s = [np.sin(w1 / Fs * i) + np.sin(w2 / Fs * i) for i in t]
+
+filt = create_filter_butterworth(N, 25, 3, 1.5, 1.0)
+fs = apply_filter_butterworth(s, filt)
+# fs = butterworth_filter(s, 25, 3, 1.5, 1.0)
+ir = impulse_response_butterworth(filt)
+
+sym = np.append(ir[::-1], ir)
+
+coeffs = np.fft.ifft(sym.real) * 10
+#coeffs = coeffs[:len(coeffs) // 2]
+
+#coeffs[2:-2] = 0
+
+#coeffs = np.fft.fft(coeffs)
 
 
 numPlots = 3
 
+
 plt.subplot(numPlots, 1, 1).set_title('Datas')
-plt.plot(x, [d.real for d in signal], label='signal')
+
+plt.plot(t, s, label='signal')
+
+plt.plot(t, fs, label='filtered')
 
 
-plt.plot(x, [d.real for d in filteredSignal], label='filteredSignal')
+
+plt.legend(loc='upper right')
+
+plt.subplot(numPlots, 1, 2).set_title('Chars')
+
+
+plt.plot([i for i in range(len(ir.real))], np.absolute(ir), label='IR')
+
+plt.plot([i for i in range(len(ir.real))], np.angle(ir) * 0.2, label='Angle')
 
 plt.legend(loc='upper right')
 
 
 
-plt.subplot(numPlots, 1, 2).set_title('IR')
 
-ir = ImpulseResponse(sampleCount, sampleFrequency, 30, 1.5, 1.1) * 2
 
-xir = range(len(ir))
+N = 50
+T = 10.0 # s
 
-plt.plot(xir, [np.absolute(d) for d in ir], label='IR')
+t = np.linspace(0, T, N)
+s = np.ones(N)
 
-phase = np.angle(ir)
+df = 1. / T
+k = [i * df for i in range(N)]
 
-plt.plot(xir, [(d) for d in phase], label='Ph')
+HGen = transfer_function_butterworth(20, 30, 1.0, 5.0)
 
-ir += ir[::-1]
-ircnt = (np.fft.ifft(ir))
-ircnt = np.fft.fftshift(ircnt) 
+afr = [np.power(np.absolute(HGen(1j*i)), 2) for i in k]
+phase = [np.angle(HGen(1j*i)) for i in k]
+ir = np.fft.fft(afr)
+
+ir = ir[:len(ir) / 2]
+
+plt.subplot(numPlots, 1, 3).set_title('Chars')
+
+
+
+plt.plot(k, afr, label='AFR')
+
+
+plt.plot([i for i in range(len(coeffs.real))], np.real(coeffs), label='real')
+
+plt.plot([i for i in range(len(coeffs.imag))], np.imag(coeffs), label='imag')
+
+#plt.plot(k, phase, label='Phase')
+
+#plt.plot(k, np.absolute(ir), label='IR')
 
 plt.legend(loc='upper right')
 
-plt.subplot(numPlots, 1, 3).set_title('CNT')
-plt.plot(xir, [(d.real) for d in ircnt], label='Cnt')
 
 
-phase = np.angle(ircnt)
-plt.plot(xir, [(d.imag) for d in ircnt], label='Ph')
-
-#plt.plot(x, [(d.real) for d in filteredSignal], label='filteredSignal')
 
 
-plt.legend(loc='upper right')
 
-'''
 
-'''
 
 
 
 
 
 plt.show()
-
-'''
 
